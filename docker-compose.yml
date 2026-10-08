@@ -1,0 +1,32 @@
+services:
+  database:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword123
+      MYSQL_DATABASE: devops_dashboard
+      MYSQL_USER: dashboard
+      MYSQL_PASSWORD: dashboard123
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+
+  backend:
+    build: ./backend
+    environment:
+      DB_HOST: database
+      DB_PORT: 3306
+      DB_NAME: devops_dashboard
+      DB_USER: dashboard
+      DB_PASSWORD: dashboard123
+    depends_on:
+      - database
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+
+volumes:
+  mysql_data:
