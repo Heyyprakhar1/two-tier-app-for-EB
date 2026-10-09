@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DevOps Deployment Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="header-left">
+                <div class="logo-badge">🚀</div>
+                <div>
+                    <h1>DevOps Deployment Dashboard</h1>
+                    <p class="subtitle">Two-Tier Web Application &bull; Flask &bull; MySQL &bull; AWS Elastic Beanstalk Ready</p>
+                </div>
+            </div>
+            <div class="header-right">
+                <span class="architecture-badge">Browser &rarr; Flask &rarr; MySQL</span>
+                {% if db_connected %}
+                    <span class="status-indicator status-online" title="Database Connected">
+                        <span class="dot dot-green"></span> DB Online
+                    </span>
+                {% else %}
+                    <span class="status-indicator status-offline" title="Database Disconnected">
+                        <span class="dot dot-red"></span> DB Offline
+                    </span>
+                {% endif %}
+                <a href="/health" target="_blank" class="health-btn">Health Check</a>
+            </div>
+        </header>
+
+        <!-- Flash Messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="alerts-container">
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}">
+                            <span class="alert-icon">
+                                {% if category == 'success' %}✓{% else %}⚠{% endif %}
+                            </span>
+                            <span class="alert-text">{{ message }}</span>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
+        <!-- Metrics Overview Cards -->
+        <section class="metrics-grid">
+            <div class="metric-card metric-total">
+                <div class="metric-label">Total Deployments</div>
+                <div class="metric-value">{{ stats.total }}</div>
+                <div class="metric-hint">All recorded events</div>
+            </div>
+            <div class="metric-card metric-success">
+                <div class="metric-label">Successful</div>
+                <div class="metric-value">{{ stats.successful }}</div>
+                <div class="metric-hint">Completed normally</div>
+            </div>
+            <div class="metric-card metric-progress">
+                <div class="metric-label">In Progress</div>
+                <div class="metric-value">{{ stats.in_progress }}</div>
+                <div class="metric-hint">Active rollouts</div>
+            </div>
+            <div class="metric-card metric-failed">
+                <div class="metric-label">Failed</div>
+                <div class="metric-value">{{ stats.failed }}</div>
+                <div class="metric-hint">Requires attention</div>
+            </div>
+        </section>
+
+        <!-- Form: Record New Deployment -->
+        <section class="card form-card">
+            <div class="card-header">
+                <h2>Record New Deployment</h2>
+                <span class="card-subtitle">Add a deployment tracking record to the MySQL database</span>
+            </div>
+            <form action="{{ url_for('create_deployment') }}" method="POST" class="deployment-form">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="application">Application Name</label>
+                        <input
+                            type="text"
+                            id="application"
+                            name="application"
+                            placeholder="e.g. payment-service"
+                            maxlength="100"
+                            required
+                        >
+                    </div>
+
+                    <div class="form-group">
+                        <label for="version">Version / Tag</label>
+                        <input
+                            type="text"
+                            id="version"
+                            name="version"
+                            placeholder="e.g. v2.4.1"
+                            maxlength="50"
+                            required
+                        >
+                    </div>
+
+                    <div class="form-group">
+                        <label for="environment">Environment</label>
+                        <select id="environment" name="environment" required>
+                            <option value="production">Production</option>
+                            <option value="staging">Staging</option>
+                            <option value="qa">QA</option>
+                            <option value="development">Development</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="status">Deployment Status</label>
+                        <select id="status" name="status" required>
+                            <option value="SUCCESS">SUCCESS</option>
+                            <option value="IN_PROGRESS" selected>IN_PROGRESS</option>
+                            <option value="FAILED">FAILED</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group form-action">
+                        <label>&nbsp;</label>
+                        <button type="submit" class="btn btn-primary">
+                            + Add Deployment
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </section>
+
+        <!-- Deployments History Table -->
+        <section class="card table-card">
+            <div class="card-header table-header">
+                <div>
+                    <h2>Deployment History</h2>
+                    <span class="card-subtitle">Live records queried from MySQL table <code>deployments</code></span>
+                </div>
+                <div class="table-actions">
+                    <a href="{{ url_for('index') }}" class="btn btn-secondary btn-sm">&#x21bb; Refresh</a>
+                </div>
+            </div>
+
+            {% if deployments %}
+                <div class="table-responsive">
+                    <table class="deployments-table">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Application</th>
+                                <th>Version</th>
+                                <th>Environment</th>
+                                <th>Status</th>
+                                <th>Created Time (UTC)</th>
+                                <th class="text-right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for d in deployments %}
+                                <tr>
+                                    <td class="col-id">{{ d.id }}</td>
+                                    <td class="col-app">
+                                        <strong>{{ d.application }}</strong>
+                                    </td>
+                                    <td class="col-version">
+                                        <span class="badge-code">{{ d.version }}</span>
+                                    </td>
+                                    <td>
+                                        <span class="env-badge env-{{ d.environment }}">
+                                            {{ d.environment }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <span class="status-pill status-{{ d.status.lower() }}">
+                                            {{ d.status }}
+                                        </span>
+                                    </td>
+                                    <td class="col-time">{{ d.created_at | format_datetime }}</td>
+                                    <td class="text-right">
+                                        <form
+                                            action="{{ url_for('delete_deployment', deployment_id=d.id) }}"
+                                            method="POST"
+                                            class="inline-form"
+                                            onsubmit="return confirm('Are you sure you want to delete deployment #{{ d.id }} ({{ d.application }})?');"
+                                        >
+                                            <button type="submit" class="btn btn-danger btn-sm" title="Delete deployment">
+                                                Delete
+                                            </button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <div class="empty-state">
+                    <div class="empty-icon">📦</div>
+                    <h3>No Deployments Found</h3>
+                    <p>There are currently no deployment records in the database.</p>
+                    <p class="empty-hint">Use the form above to record your first deployment.</p>
+                </div>
+            {% endif %}
+        </section>
+
+        <!-- Footer -->
+        <footer class="app-footer">
+            <p><strong>DevOps Deployment Dashboard</strong> &bull; Simple EB-Ready Two-Tier Architecture</p>
+            <p class="footer-details">
+                Flask App (Port 5000) &bull; MySQL 8.x Database &bull; Gunicorn Production WSGI
+            </p>
+        </footer>
+    </div>
+</body>
+</html>

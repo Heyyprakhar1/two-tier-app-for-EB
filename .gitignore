@@ -1,5 +1,33 @@
-__pycache__/
-*.pyc
+# Environment variables and secrets
 .env
+.env.*
+!.env.example
+
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
 .venv/
+venv/
+env/
+ENV/
+
+# Packaging & builds
+build/
+dist/
+*.egg-info/
+
+# Operating System & IDE files
 .DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Docker / runtime data
+*.log
