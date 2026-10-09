@@ -24,9 +24,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 RUN chmod +x entrypoint.sh
 
-# Expose standard container ports
+# Expose application port (Elastic Beanstalk routes traffic to the single exposed port)
 EXPOSE 5000
-EXPOSE 3306
 
 # Volume for optional data persistence
 VOLUME /var/lib/mysql
