@@ -79,7 +79,7 @@ docker compose up -d --build
 Run this exact command from the repository root:
 
 ```bash
-zip -r eb-deployment.zip . -x ".git/*" ".git" ".venv/*" ".venv" "*__pycache__*" "*.pyc" "*.log" "eb-deployment.zip"
+zip -r eb-deployment.zip . -x ".git/*" ".git" ".venv/*" ".venv" "*__pycache__*" "*.pyc" "*.log" "docker-compose.yml" "*.zip"
 ```
 
 ### Bundle Structure Verification
