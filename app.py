@@ -16,7 +16,7 @@ app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "dev-secret-key-change-in-production")
 
 # MySQL Database configuration with environment variables
-MYSQL_HOST = os.getenv("MYSQL_HOST", os.getenv("DB_HOST", "database"))
+MYSQL_HOST = os.getenv("MYSQL_HOST", os.getenv("DB_HOST", "127.0.0.1"))
 MYSQL_PORT = int(os.getenv("MYSQL_PORT", os.getenv("DB_PORT", "3306")))
 MYSQL_USER = os.getenv("MYSQL_USER", os.getenv("DB_USER", "dashboard"))
 MYSQL_PASSWORD = os.getenv("MYSQL_PASSWORD", os.getenv("DB_PASSWORD", "dashboard123"))

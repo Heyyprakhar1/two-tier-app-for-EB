@@ -1,196 +1,144 @@
-# DevOps Deployment Dashboard
+# DevOps Deployment Dashboard — One ZIP, Two Elastic Beanstalk Modes
 
-A simple, beginner-friendly **two-tier web application** built with **Flask** and **MySQL**, containerized with **Docker**, and designed to be **AWS Elastic Beanstalk-ready**.
+A simple, beginner-friendly **two-tier web application** (Python Flask + MySQL) designed to deploy reproducibly using the **exact same source ZIP bundle** across both AWS Elastic Beanstalk deployment modes:
+
+1. **Elastic Beanstalk Standard Mode** (EC2 Single-Container Docker)
+2. **Elastic Beanstalk Cluster Mode** (Managed EKS Container Platform)
+
+No RDS configuration, no separate database provisioning, no ECR push steps, and no manual environment variables are required for the learner.
 
 ---
 
-## 1. Architecture
+## 1. Architecture Overview
+
+### Tutorial Architecture: Zero-Config Embedded MySQL in Container
 
 ```text
-Browser  ─── HTTP (Port 5000) ───▶  Flask Application (Gunicorn)  ─── Port 3306 ───▶  MySQL Database
+                               ┌──────────────────────────────────────────────────────────┐
+                               │                 Single Docker Container                  │
+                               │                                                          │
+Browser ──▶ Port 5000 (HTTP) ──┼──▶ Flask Application (Gunicorn WSGI)                     │
+                               │           │                                              │
+                               │           ▼ (Port 3306 / 127.0.0.1)                      │
+                               │     Embedded MySQL (MariaDB 11.x)                        │
+                               │     - Automatic schema init via database/init.sql        │
+                               │     - Supervised with fail-fast health monitoring        │
+                               └──────────────────────────────────────────────────────────┘
 ```
 
-- **Tier 1 (Application Layer):** Flask web server running with Gunicorn WSGI, rendering dynamic HTML templates and handling deployment CRUD logic.
-- **Tier 2 (Database Layer):** MySQL 8.x storing deployment history and status metrics.
-  - **Local Development:** MySQL runs as a container managed by Docker Compose with a persistent named volume.
-  - **AWS Elastic Beanstalk / Production:** The Flask container connects to an external, managed database such as **Amazon RDS (MySQL)**.
+- **Application Layer:** Flask 3.x with Jinja2 server-rendered dashboard, PyMySQL driver, and Gunicorn WSGI running on port `5000`.
+- **Database Layer:** Embedded MySQL-compatible daemon (MariaDB) running on `127.0.0.1:3306`.
+- **Process Supervisor:** [entrypoint.sh](file:///home/prakhar/multi-tier-app-for-EB/entrypoint.sh) starts MariaDB, verifies health, seeds demo records from `database/init.sql`, launches Gunicorn, and monitors both processes. If either service dies, the container exits with an error so Elastic Beanstalk detects the failure visibly.
+- **External RDS Support:** If an external `MYSQL_HOST` is supplied, the container skips starting the embedded MySQL daemon and connects to the specified remote host.
 
 ---
 
-## 2. Features
+## 2. Why One ZIP Works in Both Elastic Beanstalk Modes
 
-- **Live Deployment Dashboard:** View all deployment events stored in MySQL, ordered newest first.
-- **Metric Summary Cards:** Instant overview of Total, Successful, In-Progress, and Failed deployments.
-- **Record Deployments:** Form with input validation (Application Name, Version, Environment, Status).
-- **Delete Deployments:** Safe deletion with confirmation prompt.
-- **Empty State Display:** Clear guidance when no deployments exist in the database.
-- **Resilient Database Retries:** Flask automatically retries MySQL connections during startup or transient network blips without crashing.
-- **Production WSGI Server:** Powered by Gunicorn with multi-worker concurrency.
-- **Lightweight Health Check (`/health`):** Verifies application and database connectivity without exposing sensitive credentials or topology.
-- **Elastic Beanstalk Compatible:** Standard single-container Dockerfile at the repository root binding to port 5000.
-
----
-
-## 3. Tech Stack
-
-- **Backend / Web:** Python 3.12, Flask 3.x, Gunicorn 23.x
-- **Database Driver:** PyMySQL with cryptography (caching_sha2_password support)
-- **Database:** MySQL 8.x
-- **Containerization:** Docker, Docker Compose
+| Consideration | Standard Mode (EC2) | Cluster Mode (EKS) |
+|---|---|---|
+| **Underlying Compute** | Dedicated Amazon EC2 instances | Managed Amazon EKS (EKS Auto Mode) |
+| **Build Mechanism** | Builds `Dockerfile` on EC2 host | Builds `Dockerfile` via AWS CodeBuild & pushes to ECR |
+| **Docker Compose Support** | Supported via AL2023 Compose mode | **Not Supported** (Cluster mode builds Dockerfile only) |
+| **Database Connectivity** | Connects to `127.0.0.1:3306` inside container | Connects to `127.0.0.1:3306` inside pod container |
+| **Learner Effort** | Upload ZIP & click Create | Upload ZIP & click Create |
+| **Persistence Behavior** | Persists during runtime; resets on EC2 replacement | Persists during runtime; ephemeral per Pod replica |
 
 ---
 
-## 4. Project Structure
+## 3. Local Development
 
-```text
-multi-tier-app-for-EB/
-├── Dockerfile              # Production Dockerfile for Flask app (Gunicorn on port 5000)
-├── docker-compose.yml      # Local dev multi-container setup (Flask + MySQL)
-├── requirements.txt        # Python dependencies
-├── app.py                  # Flask application routes, validation, and DB logic
-├── .env.example            # Sample environment variables
-├── .dockerignore           # Excludes git, caches, and secrets from Docker builds
-├── .gitignore              # Excludes secrets, caches, and virtual environments
-├── database/
-│   └── init.sql            # Database schema and initial seed data
-├── templates/
-│   └── index.html          # Server-rendered HTML dashboard template
-├── static/
-│   └── style.css           # Lightweight, responsive CSS styling
-└── README.md               # Project documentation and deployment guide
-```
-
----
-
-## 5. Quick Start (Local Development)
-
-### Prerequisites
-
-- [Docker](https://docs.docker.com/get-docker/) (v20.10+)
-- [Docker Compose](https://docs.docker.com/compose/) (v2.0+)
-
-### Step 1: Clone and Enter the Directory
+### Run Locally with Docker Compose
 
 ```bash
-git clone git@github.com:Heyyprakhar1/multi-tier-app-for-EB.git
-cd multi-tier-app-for-EB
+docker compose up -d --build
 ```
-
-### Step 2: (Optional) Create Local Environment File
-
-```bash
-cp .env.example .env
-```
-
-### Step 3: Start Application and Database
-
-```bash
-docker compose up --build
-```
-
-Docker Compose will:
-1. Start the MySQL 8.4 database container and run `database/init.sql`.
-2. Wait for MySQL's health check (`mysqladmin ping`) to report healthy.
-3. Build and launch the Flask application container with Gunicorn on port `5000`.
-
-### Step 4: Access the Application
 
 - **Dashboard:** [http://localhost:5000](http://localhost:5000)
 - **Health Check:** [http://localhost:5000/health](http://localhost:5000/health)
-- **Deployments API (JSON):** [http://localhost:5000/api/deployments](http://localhost:5000/api/deployments)
-- **Statistics API (JSON):** [http://localhost:5000/api/stats](http://localhost:5000/api/stats)
+- **Deployments API:** [http://localhost:5000/api/deployments](http://localhost:5000/api/deployments)
+- **Stats API:** [http://localhost:5000/api/stats](http://localhost:5000/api/stats)
 
----
+Data is persisted locally in the Docker named volume `mysql_data`.
 
-## 6. Environment Variables
-
-The application is configured entirely via environment variables.
-
-| Variable | Description | Default (Local Compose) |
-|---|---|---|
-| `PORT` | Port Flask/Gunicorn listens on | `5000` |
-| `SECRET_KEY` | Flask session & flash message secret key | `change-this-in-production` |
-| `MYSQL_HOST` | MySQL hostname or endpoint | `database` (or Amazon RDS endpoint) |
-| `MYSQL_PORT` | MySQL connection port | `3306` |
-| `MYSQL_DB` | Database name | `devops_dashboard` |
-| `MYSQL_USER` | MySQL username | `dashboard` |
-| `MYSQL_PASSWORD` | MySQL user password | `dashboard123` |
-| `MYSQL_ROOT_PASSWORD`| Root password for local MySQL container | `rootpassword123` |
-
----
-
-## 7. Verifying Data Persistence
-
-The database uses a Docker named volume (`mysql_data`). Records persist across container restarts.
-
-Test persistence:
-1. Open [http://localhost:5000](http://localhost:5000) and create a new deployment (e.g. `auth-service` / `v1.0.0` / `staging` / `SUCCESS`).
-2. Stop the containers:
-   ```bash
-   docker compose down
-   ```
-3. Restart the containers:
-   ```bash
-   docker compose up -d
-   ```
-4. Refresh [http://localhost:5000](http://localhost:5000) — all deployments remain intact.
+To stop the application:
+```bash
+docker compose down
+```
 
 To reset the database cleanly:
 ```bash
 docker compose down -v
-docker compose up --build
+docker compose up -d --build
 ```
 
 ---
 
-## 8. AWS Elastic Beanstalk Deployment Guide
+## 4. Packaging the Source Bundle (One ZIP)
 
-When deploying to AWS Elastic Beanstalk, follow standard cloud best practices:
-1. **Application Layer (EB):** Run the Flask application container on an Elastic Beanstalk **Docker environment**.
-2. **Database Layer (RDS):** Provision a managed **Amazon RDS for MySQL** instance. Do **not** run MySQL in a container inside Elastic Beanstalk for production workloads.
+Run this exact command from the repository root:
 
-### Deployment Steps:
-
-1. **Create an Amazon RDS MySQL Database:**
-   - Note the endpoint (e.g. `devops-db.c7x...rds.amazonaws.com`), port (`3306`), username, and password.
-   - Ensure the RDS Security Group allows inbound traffic on port 3306 from your Elastic Beanstalk environment.
-
-2. **Configure Environment Variables in Elastic Beanstalk:**
-   In the AWS Management Console → **Elastic Beanstalk** → **Configuration** → **Software (Environment properties)**, set:
-   - `MYSQL_HOST`: `<your-rds-endpoint>`
-   - `MYSQL_PORT`: `3306`
-   - `MYSQL_DB`: `devops_dashboard`
-   - `MYSQL_USER`: `<your-rds-username>`
-   - `MYSQL_PASSWORD`: `<your-rds-password>`
-   - `SECRET_KEY`: `<a-strong-random-secret>`
-   - `PORT`: `5000`
-
-3. **Deploy the Code:**
-   - Package the repository into a `.zip` archive (containing `Dockerfile`, `app.py`, `requirements.txt`, `templates/`, `static/`).
-   - Upload and deploy to Elastic Beanstalk via the AWS Console or EB CLI (`eb deploy`).
-   - The root `Dockerfile` automatically builds and starts Gunicorn binding to `0.0.0.0:5000`.
-
-4. **Health Check Path:**
-   - Elastic Beanstalk health check path can be set to `/health` or `/`.
-
----
-
-## 9. Troubleshooting
-
-### 1. Database Connection Refused
-- In Docker Compose, ensure the `database` service has completed initialization. The app automatically retries connecting.
-- Check logs: `docker compose logs -f`
-
-### 2. Port 5000 Conflict
-- If port 5000 is occupied on your host, adjust `docker-compose.yml`:
-  ```yaml
-  ports:
-    - "5001:5000"
-  ```
-- Then open [http://localhost:5001](http://localhost:5001).
-
-### 3. Reset Database from Scratch
 ```bash
-docker compose down -v
-docker compose up --build
+zip -r eb-deployment.zip . -x ".git/*" ".git" ".venv/*" ".venv" "*__pycache__*" "*.pyc" "*.log" "eb-deployment.zip"
 ```
+
+### Bundle Structure Verification
+
+Ensure the [Dockerfile](file:///home/prakhar/multi-tier-app-for-EB/Dockerfile) is at the archive root:
+
+```text
+eb-deployment.zip
+├── Dockerfile              # Root Dockerfile (MariaDB + Flask + Gunicorn on 5000)
+├── entrypoint.sh           # Supervisor entrypoint script
+├── app.py                  # Flask routes, CRUD handlers, and /health
+├── requirements.txt        # Python dependencies
+├── docker-compose.yml      # Local dev configuration
+├── .dockerignore           # Build exclusions
+├── .env.example            # Environment reference
+├── .gitignore              # Git ignore rules
+├── database/
+│   └── init.sql            # Table schema & initial demonstration records
+├── templates/
+│   └── index.html          # Server-rendered dashboard HTML
+└── static/
+    └── style.css           # Clean CSS styles
+```
+
+---
+
+## 5. Elastic Beanstalk Deployment Steps
+
+### Mode A: Elastic Beanstalk Standard Mode (Traditional EC2)
+
+1. Open the **AWS Elastic Beanstalk Console**.
+2. Click **Create Application** (or **Create environment**).
+3. **Environment tier:** Select **Web server environment**.
+4. **Platform:** Select **Docker** (Platform branch: *Docker running on 64bit Amazon Linux 2023*).
+5. **Application code:**
+   - Choose **Upload your code**.
+   - Select **Local file** and upload `eb-deployment.zip`.
+6. Click **Create environment**.
+7. Elastic Beanstalk provisions an EC2 instance, builds the `Dockerfile`, launches the container, routes port 80 to port 5000, and verifies `/health`.
+
+---
+
+### Mode B: Elastic Beanstalk Cluster Mode (Managed EKS)
+
+1. Open the **AWS Elastic Beanstalk Console**.
+2. Click **Create application** (or **Create environment**).
+3. **Environment mode:** Select **Cluster Mode** (Managed infrastructure on EKS).
+4. **Application code:**
+   - Choose **Upload your code**.
+   - Select **Local file** and upload the exact same `eb-deployment.zip`.
+5. Click **Create environment**.
+6. Elastic Beanstalk triggers AWS CodeBuild to build the image from `Dockerfile`, pushes it to ECR, schedules the pod on EKS Auto Mode, configures ingress to port 5000, and verifies `/health`.
+
+---
+
+## 6. Trade-Offs and Architectural Notes
+
+1. **Tutorial vs. Production Storage:**
+   - **Tutorial Mode:** Embedding MySQL in the container allows zero-cost, zero-configuration deployment in both EB modes with one ZIP.
+   - **Production Mode:** For durable production workloads, databases must run externally (e.g., **Amazon RDS**) to ensure persistence across container rollouts, auto-scaling, and cluster node replacements.
+2. **Process Supervision:**
+   - [entrypoint.sh](file:///home/prakhar/multi-tier-app-for-EB/entrypoint.sh) acts as a lightweight supervisor monitoring both MariaDB and Gunicorn. If either crashes, the container exits with a non-zero code to ensure failure is immediately visible in Elastic Beanstalk health metrics.

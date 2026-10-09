@@ -1,38 +1,14 @@
 services:
-  database:
-    image: mysql:8.4
-    restart: always
-    environment:
-      MYSQL_ROOT_PASSWORD: rootpassword123
-      MYSQL_DATABASE: devops_dashboard
-      MYSQL_USER: dashboard
-      MYSQL_PASSWORD: dashboard123
-    volumes:
-      - mysql_data:/var/lib/mysql
-      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
-    healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u dashboard -pdashboard123 || exit 1"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-      start_period: 10s
-
   app:
     build: .
     restart: always
     ports:
       - "5000:5000"
     environment:
-      MYSQL_HOST: database
-      MYSQL_PORT: 3306
-      MYSQL_DB: devops_dashboard
-      MYSQL_USER: dashboard
-      MYSQL_PASSWORD: dashboard123
-      SECRET_KEY: local-dev-secret-key-change-in-production
       PORT: 5000
-    depends_on:
-      database:
-        condition: service_healthy
+      SECRET_KEY: local-dev-secret-key-change-in-production
+    volumes:
+      - mysql_data:/var/lib/mysql
 
 volumes:
   mysql_data:

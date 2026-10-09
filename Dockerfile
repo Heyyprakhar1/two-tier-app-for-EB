@@ -1,21 +1,35 @@
 FROM python:3.12-slim
 
-# Prevent Python from writing .pyc files and enable unbuffered stdout/stderr
+# Prevent Python bytecode generation and ensure unbuffered logging
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
+    DEBIAN_FRONTEND=noninteractive \
     PORT=5000
 
 WORKDIR /app
 
-# Install dependencies first for Docker layer caching
+# Install MariaDB (MySQL-compatible server and client) along with procps for process monitoring
+RUN apt-get update -qq && \
+    apt-get install -y -qq --no-install-recommends \
+        mariadb-server \
+        mariadb-client \
+        procps && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install Python requirements
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code and assets
+# Copy application assets, database scripts, and supervisor entrypoint
 COPY . .
+RUN chmod +x entrypoint.sh
 
-# Expose standard Flask / Elastic Beanstalk container port
+# Expose standard container ports
 EXPOSE 5000
+EXPOSE 3306
 
-# Run with Gunicorn production WSGI server
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "--threads", "2", "--timeout", "60", "--access-logfile", "-", "--error-logfile", "-", "app:app"]
+# Volume for optional data persistence
+VOLUME /var/lib/mysql
+
+# Run through the supervisor entrypoint script
+ENTRYPOINT ["/app/entrypoint.sh"]
